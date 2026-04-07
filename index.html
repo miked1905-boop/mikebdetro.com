@@ -561,6 +561,97 @@
       line-height: 1.4;
     }
 
+    .upload-btn {
+      width: 100%;
+      padding: .75rem;
+      background: transparent;
+      border: 2px solid var(--accent);
+      border-radius: 12px;
+      color: var(--accent);
+      font-family: inherit;
+      font-size: .85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .15s;
+      margin-top: .5rem;
+    }
+    .upload-btn:hover { background: var(--accent); color: #fff }
+
+    .deploy-status {
+      font-size: .8rem;
+      text-align: center;
+      margin-top: .5rem;
+      padding: .5rem;
+      border-radius: 8px;
+      display: none;
+    }
+    .deploy-status.show { display: block }
+    .deploy-status.success { background: rgba(34,197,94,.15); color: #22c55e }
+    .deploy-status.error { background: rgba(239,68,68,.15); color: #ef4444 }
+    .deploy-status.loading { background: rgba(99,102,241,.15); color: var(--accent) }
+
+    .token-setup {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem;
+      margin-top: .5rem;
+    }
+    .token-setup p {
+      font-size: .75rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin-bottom: .6rem;
+    }
+    .token-setup a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .token-setup a:hover { text-decoration: underline }
+    .token-row {
+      display: flex;
+      gap: .4rem;
+    }
+    .token-row input {
+      flex: 1;
+      padding: .5rem .6rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: .78rem;
+      outline: none;
+    }
+    .token-row input:focus { border-color: var(--accent) }
+    .token-row button {
+      padding: .5rem .75rem;
+      background: var(--accent);
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      font-family: inherit;
+      font-size: .78rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .token-saved {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: .78rem;
+      color: #22c55e;
+    }
+    .token-saved button {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: .75rem;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+    .token-saved button:hover { color: #ef4444 }
+
     .add-link-btn {
       width: 100%;
       padding: .75rem;
@@ -1024,18 +1115,93 @@ function renderEditor() {
   themeSec.appendChild(swatches);
   body.appendChild(themeSec);
 
-  // ── Export Section ──
-  const exportSec = sec('Deploy');
+  // ── Deploy Section ──
+  const deploySec = sec('Deploy');
+
+  // Download button
   const exportBtn = document.createElement('button');
   exportBtn.className = 'export-btn';
   exportBtn.textContent = 'Download Site';
   exportBtn.onclick = exportSite;
-  exportSec.appendChild(exportBtn);
-  const exportDesc = document.createElement('p');
-  exportDesc.className = 'export-desc';
-  exportDesc.textContent = 'Downloads your page with all edits baked in. Upload to GitHub to update the live site.';
-  exportSec.appendChild(exportDesc);
-  body.appendChild(exportSec);
+  deploySec.appendChild(exportBtn);
+
+  // Upload & Deploy button
+  const uploadBtn = document.createElement('button');
+  uploadBtn.className = 'upload-btn';
+  uploadBtn.textContent = 'Upload & Deploy';
+  const uploadInput = document.createElement('input');
+  uploadInput.type = 'file';
+  uploadInput.accept = '.html';
+  uploadInput.style.display = 'none';
+  uploadBtn.onclick = () => {
+    const token = localStorage.getItem('linkme_gh_token');
+    if (!token) {
+      showDeployStatus('Set up your GitHub token below first', 'error');
+      return;
+    }
+    uploadInput.click();
+  };
+  uploadInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      deployToGitHub(ev.target.result);
+    };
+    reader.readAsText(file);
+    uploadInput.value = '';
+  });
+  deploySec.appendChild(uploadBtn);
+  deploySec.appendChild(uploadInput);
+
+  // Status message
+  const statusEl = document.createElement('div');
+  statusEl.className = 'deploy-status';
+  statusEl.id = 'deployStatus';
+  deploySec.appendChild(statusEl);
+
+  const deployDesc = document.createElement('p');
+  deployDesc.className = 'export-desc';
+  deployDesc.textContent = 'Download to save your edits as a file. Upload to push it live to mikebdetro.com.';
+  deploySec.appendChild(deployDesc);
+
+  // GitHub token setup
+  const tokenBox = document.createElement('div');
+  tokenBox.className = 'token-setup';
+  const savedToken = localStorage.getItem('linkme_gh_token');
+
+  if (savedToken) {
+    tokenBox.innerHTML = '<div class="token-saved"><span>GitHub token saved</span><button id="removeToken">Remove</button></div>';
+    deploySec.appendChild(tokenBox);
+    setTimeout(() => {
+      const rmBtn = document.getElementById('removeToken');
+      if (rmBtn) rmBtn.onclick = () => { localStorage.removeItem('linkme_gh_token'); renderEditor(); };
+    }, 0);
+  } else {
+    tokenBox.innerHTML = `
+      <p><strong>One-time setup:</strong> Create a GitHub token to enable direct deploys.<br>
+      Go to <a href="https://github.com/settings/tokens/new" target="_blank">github.com/settings/tokens</a> → Generate → check <strong>"repo"</strong> scope → copy the token and paste below.</p>
+      <div class="token-row">
+        <input type="password" id="ghTokenInput" placeholder="ghp_xxxxxxxxxxxx" />
+        <button id="saveToken">Save</button>
+      </div>
+    `;
+    deploySec.appendChild(tokenBox);
+    setTimeout(() => {
+      const saveBtn = document.getElementById('saveToken');
+      const tokenInp = document.getElementById('ghTokenInput');
+      if (saveBtn) saveBtn.onclick = () => {
+        const val = tokenInp.value.trim();
+        if (val) {
+          localStorage.setItem('linkme_gh_token', val);
+          renderEditor();
+          showDeployStatus('Token saved! You can now Upload & Deploy.', 'success');
+        }
+      };
+    }, 0);
+  }
+
+  body.appendChild(deploySec);
 }
 
 function renderSocialEditor(social, index) {
@@ -1323,6 +1489,79 @@ function exportSite() {
   a.download = 'index.html';
   a.click();
   URL.revokeObjectURL(a.href);
+}
+
+// ═══════════════════════════════════════════
+// DEPLOY TO GITHUB — pushes uploaded HTML to the repo
+// ═══════════════════════════════════════════
+const GH_REPO = 'miked1905-boop/mikebdetro.com';
+const GH_FILE = 'index.html';
+const GH_BRANCH = 'main';
+
+function showDeployStatus(msg, type) {
+  const el = document.getElementById('deployStatus');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'deploy-status show ' + type;
+  if (type === 'success') setTimeout(() => { el.className = 'deploy-status'; }, 5000);
+}
+
+async function deployToGitHub(htmlContent) {
+  const token = localStorage.getItem('linkme_gh_token');
+  if (!token) {
+    showDeployStatus('No GitHub token found. Set it up below.', 'error');
+    return;
+  }
+
+  showDeployStatus('Deploying to mikebdetro.com...', 'loading');
+
+  try {
+    // Get current file SHA (needed for update)
+    const getResp = await fetch(
+      `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}?ref=${GH_BRANCH}`,
+      { headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github+json' } }
+    );
+
+    if (!getResp.ok && getResp.status !== 404) {
+      throw new Error('Failed to fetch file info: ' + getResp.status);
+    }
+
+    const getData = getResp.ok ? await getResp.json() : null;
+    const sha = getData ? getData.sha : undefined;
+
+    // Encode content to base64
+    const encoded = btoa(unescape(encodeURIComponent(htmlContent)));
+
+    // Push the file
+    const putBody = {
+      message: 'Update site via editor',
+      content: encoded,
+      branch: GH_BRANCH,
+    };
+    if (sha) putBody.sha = sha;
+
+    const putResp = await fetch(
+      `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`,
+      {
+        method: 'PUT',
+        headers: {
+          'Authorization': `token ${token}`,
+          'Accept': 'application/vnd.github+json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(putBody),
+      }
+    );
+
+    if (!putResp.ok) {
+      const err = await putResp.json();
+      throw new Error(err.message || 'Deploy failed');
+    }
+
+    showDeployStatus('Live! mikebdetro.com will update in ~1 min.', 'success');
+  } catch (err) {
+    showDeployStatus('Deploy failed: ' + err.message, 'error');
+  }
 }
 
 // ═══════════════════════════════════════════
