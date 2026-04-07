@@ -930,8 +930,8 @@ function renderPage() {
   config.socials.forEach(s => {
     if (!s.url) return;
     const a = document.createElement('a');
-    // For email icon, auto-prefix mailto:
-    const href = s.icon === 'email' && !s.url.startsWith('mailto:') ? `mailto:${s.url}` : s.url;
+    // For email icon, auto-prefix mailto:; for everything else, ensure https://
+    const href = s.icon === 'email' && !s.url.startsWith('mailto:') ? `mailto:${s.url}` : fixUrl(s.url);
     a.href = href;
     a.setAttribute('aria-label', s.label || s.icon);
     if (!href.startsWith('mailto:')) { a.target = '_blank'; a.rel = 'noopener'; }
@@ -945,7 +945,7 @@ function renderPage() {
   config.links.forEach(link => {
     const a = document.createElement('a');
     a.className = 'link-card';
-    a.href = link.url || '#';
+    a.href = fixUrl(link.url) || '#';
     if (!link.url?.startsWith('mailto:')) { a.target = '_blank'; a.rel = 'noopener'; }
     a.innerHTML = `
       <div class="link-icon" style="background:${iconBg(link.color)};color:${link.color}">
@@ -965,6 +965,12 @@ function escHtml(s) {
   const d = document.createElement('div');
   d.textContent = s;
   return d.innerHTML;
+}
+
+function fixUrl(url) {
+  if (!url || url === '#') return url;
+  if (/^(https?:\/\/|mailto:|tel:)/.test(url)) return url;
+  return 'https://' + url;
 }
 
 // ═══════════════════════════════════════════
