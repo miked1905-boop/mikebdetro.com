@@ -302,6 +302,23 @@
       flex-shrink: 0;
     }
     .editor-header h2 { font-size: 1.1rem; font-weight: 700 }
+    .editor-header-actions { display: flex; align-items: center; gap: .5rem; }
+    .header-save-btn {
+      padding: .5rem .85rem;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: .82rem;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: opacity .15s, background .15s;
+    }
+    .header-save-btn:hover { opacity: .85 }
+    .header-save-btn:disabled { opacity: .7; cursor: default }
+    .header-save-btn.saved { background: #22c55e }
+    .header-save-btn.error { background: #ef4444 }
     .editor-close {
       width: 34px; height: 34px;
       border-radius: 8px;
@@ -808,9 +825,12 @@
   <div class="editor-panel" id="editorPanel">
     <div class="editor-header">
       <h2>Edit Your Page</h2>
-      <button class="editor-close" id="editorClose">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>
-      </button>
+      <div class="editor-header-actions">
+        <button class="header-save-btn" id="headerSave">Save &amp; Publish</button>
+        <button class="editor-close" id="editorClose">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>
+        </button>
+      </div>
     </div>
     <div class="editor-body" id="editorBody"></div>
   </div>
@@ -1673,41 +1693,83 @@ fab.addEventListener('click', openEditor);
 overlay.addEventListener('click', closeEditor);
 closeBtn.addEventListener('click', closeEditor);
 
+const headerSave = document.getElementById('headerSave');
+headerSave.addEventListener('click', () => saveAndPublish(headerSave));
+
 // ═══════════════════════════════════════════
 // EXPORT SITE — bakes current config into a downloadable HTML
 // ═══════════════════════════════════════════
-function exportSite() {
-  // Clone current page HTML
+// Builds the full page HTML with the CURRENT config baked in as the new
+// default. Keeps the editor intact (so you can keep editing live) and resets
+// any transient open/visible state so the published page loads clean.
+function buildSiteHTML() {
   const clone = document.documentElement.cloneNode(true);
 
-  // Remove editor UI elements from the clone
-  const removeSelectors = [
-    '.edit-fab', '.editor-overlay', '.editor-panel', '.pin-modal'
-  ];
-  removeSelectors.forEach(sel => {
-    const el = clone.querySelector(sel);
-    if (el) el.remove();
-  });
+  // Reset transient editor state so the published page loads in its resting state
+  const cPanel   = clone.querySelector('#editorPanel');
+  if (cPanel)   cPanel.classList.remove('open');
+  const cOverlay = clone.querySelector('#editorOverlay');
+  if (cOverlay) cOverlay.classList.remove('open');
+  const cBody    = clone.querySelector('#editorBody');
+  if (cBody)    cBody.innerHTML = '';            // re-renders fresh when re-opened
+  const cFab     = clone.querySelector('#editFab');
+  if (cFab)     cFab.classList.remove('visible'); // hidden until re-authenticated
+  const cPin     = clone.querySelector('#pinModal');
+  if (cPin)     cPin.classList.remove('open');
 
-  // Update the default config in the script to match current config
-  const scripts = clone.querySelectorAll('script');
-  scripts.forEach(script => {
+  // Bake current config in as the new DEFAULT_CONFIG (what every visitor loads).
+  // Function-form replacement so any '$' in values isn't treated as a back-reference.
+  clone.querySelectorAll('script').forEach(script => {
     if (script.textContent.includes('DEFAULT_CONFIG')) {
-      // Replace the DEFAULT_CONFIG with current config values
       script.textContent = script.textContent.replace(
         /const DEFAULT_CONFIG = \{[\s\S]*?\n\};/,
-        'const DEFAULT_CONFIG = ' + JSON.stringify(config, null, 2) + ';'
+        () => 'const DEFAULT_CONFIG = ' + JSON.stringify(config, null, 2) + ';'
       );
     }
   });
 
-  const html = '<!DOCTYPE html>\n' + clone.outerHTML;
+  return '<!DOCTYPE html>\n' + clone.outerHTML;
+}
+
+function exportSite() {
+  const html = buildSiteHTML();
   const blob = new Blob([html], { type: 'text/html' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'index.html';
   a.click();
   URL.revokeObjectURL(a.href);
+}
+
+// One-click Save: bake current config + push straight to GitHub. No download/upload.
+function setHeaderSaveState(btn, state, text) {
+  if (!btn) return;
+  btn.classList.remove('saved', 'error');
+  btn.disabled = (state === 'loading');
+  if (state === 'saved') btn.classList.add('saved');
+  if (state === 'error') btn.classList.add('error');
+  btn.textContent = text;
+  if (state === 'saved' || state === 'error') {
+    setTimeout(() => {
+      btn.classList.remove('saved', 'error');
+      btn.disabled = false;
+      btn.textContent = 'Save & Publish';
+    }, 4000);
+  }
+}
+
+async function saveAndPublish(btn) {
+  const token = localStorage.getItem('linkme_gh_token');
+  if (!token) {
+    // One-time token setup lives in the Deploy section — jump to it.
+    const tokenInp = document.getElementById('ghTokenInput');
+    if (tokenInp) { tokenInp.scrollIntoView({ behavior: 'smooth', block: 'center' }); tokenInp.focus(); }
+    setHeaderSaveState(btn, 'error', 'Add GitHub token ↓');
+    return;
+  }
+  setHeaderSaveState(btn, 'loading', 'Saving…');
+  const ok = await deployToGitHub(buildSiteHTML());
+  setHeaderSaveState(btn, ok ? 'saved' : 'error', ok ? 'Saved! ✓ Live ~1 min' : 'Failed — try again');
 }
 
 // ═══════════════════════════════════════════
@@ -1778,8 +1840,10 @@ async function deployToGitHub(htmlContent) {
     }
 
     showDeployStatus('Live! mikebdetro.com will update in ~1 min.', 'success');
+    return true;
   } catch (err) {
     showDeployStatus('Deploy failed: ' + err.message, 'error');
+    return false;
   }
 }
 
