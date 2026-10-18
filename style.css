@@ -12,3 +12,5 @@
 /* Identity update: original user-supplied gym photo, no retouching. */
 .hero h1{font-size:clamp(86px,11.4vw,176px)}.hero-aka{font-family:var(--mono);font-size:.16em;font-weight:400;letter-spacing:0;display:inline-block;margin-left:18px;vertical-align:middle}.brand-aka{font-size:.7em;font-weight:400;letter-spacing:0;margin:0 2px}.portrait{object-position:50% 58%}.photo-top{justify-content:flex-end}
 @media(max-width:700px){.hero h1{font-size:clamp(85px,24vw,160px)}.hero-aka{margin-left:12px}.brand{gap:8px;font-size:13px}.portrait{object-position:50% 58%}}
+
+.hero-alias{color:var(--blue)}
